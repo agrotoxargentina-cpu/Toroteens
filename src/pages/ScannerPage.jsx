@@ -1,10 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
+import { BrowserMultiFormatReader } from '@zxing/browser';
+import { DecodeHintType, BarcodeFormat } from '@zxing/library';
 import { parseDNI } from '../utils/dniParser';
 import { verificarIngreso } from '../utils/ageLogic';
 import { ResultCard } from '../components/ResultCard';
 import { useConfig } from '../hooks/useConfig';
 import { useScans } from '../hooks/useScans';
+
+const HINTS = new Map([
+  [DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.PDF_417, BarcodeFormat.QR_CODE]],
+  [DecodeHintType.TRY_HARDER, true],
+]);
 
 export function ScannerPage() {
   const guardaNombre = localStorage.getItem('guardaNombre') || 'Sin nombre';
@@ -16,12 +22,13 @@ export function ScannerPage() {
   const [persona, setPersona] = useState(null);
   const [error, setError] = useState(null);
 
-  const scannerRef = useRef(null);
+  const videoRef = useRef(null);
+  const controlsRef = useRef(null);
 
-  const detenerScanner = async () => {
-    if (scannerRef.current?.isScanning) {
-      await scannerRef.current.stop();
-      scannerRef.current.clear();
+  const detenerScanner = () => {
+    if (controlsRef.current) {
+      controlsRef.current.stop();
+      controlsRef.current = null;
     }
     setEscaneando(false);
   };
@@ -29,34 +36,47 @@ export function ScannerPage() {
   const iniciarScanner = async () => {
     setError(null);
     setEscaneando(true);
-
-    await new Promise((r) => setTimeout(r, 100));
-
-    const scanner = new Html5Qrcode('reader', {
-      formatsToSupport: [
-        Html5QrcodeSupportedFormats.QR_CODE,
-        Html5QrcodeSupportedFormats.PDF_417,
-        Html5QrcodeSupportedFormats.DATA_MATRIX,
-      ],
-      verbose: false,
-    });
-    scannerRef.current = scanner;
-
-    try {
-      await scanner.start(
-        { facingMode: 'environment' },
-        { fps: 15, qrbox: { width: 280, height: 180 } },
-        async (texto) => {
-          await detenerScanner();
-          procesarDNI(texto);
-        },
-        () => {}
-      );
-    } catch {
-      setError('No se pudo acceder a la cámara. Verificá los permisos.');
-      setEscaneando(false);
-    }
   };
+
+  useEffect(() => {
+    if (!escaneando || !videoRef.current) return;
+
+    let activo = true;
+    const reader = new BrowserMultiFormatReader(HINTS);
+
+    reader
+      .decodeFromVideoDevice(undefined, videoRef.current, (result, err) => {
+        if (!activo) return;
+        if (result) {
+          activo = false;
+          if (controlsRef.current) {
+            controlsRef.current.stop();
+            controlsRef.current = null;
+          }
+          setEscaneando(false);
+          procesarDNI(result.getText());
+        }
+      })
+      .then((controls) => {
+        if (!activo) {
+          controls.stop();
+        } else {
+          controlsRef.current = controls;
+        }
+      })
+      .catch(() => {
+        setError('No se pudo acceder a la cámara. Verificá los permisos.');
+        setEscaneando(false);
+      });
+
+    return () => {
+      activo = false;
+      if (controlsRef.current) {
+        controlsRef.current.stop();
+        controlsRef.current = null;
+      }
+    };
+  }, [escaneando]);
 
   const procesarDNI = async (raw) => {
     try {
@@ -86,8 +106,8 @@ export function ScannerPage() {
 
   useEffect(() => {
     return () => {
-      if (scannerRef.current?.isScanning) {
-        scannerRef.current.stop().catch(() => {});
+      if (controlsRef.current) {
+        controlsRef.current.stop();
       }
     };
   }, []);
@@ -151,9 +171,21 @@ export function ScannerPage() {
         </div>
       ) : (
         <div className="flex-1 flex flex-col gap-4">
-          <div className="relative rounded-2xl overflow-hidden bg-black">
-            <div id="reader" className="w-full" />
+          <div className="relative rounded-2xl overflow-hidden bg-black aspect-video">
+            <video
+              ref={videoRef}
+              className="w-full h-full object-cover"
+              autoPlay
+              muted
+              playsInline
+            />
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="w-72 h-36 border-2 border-purple-400 rounded-lg opacity-70" />
+            </div>
           </div>
+          <p className="text-white/40 text-sm text-center">
+            Apuntá al código de barras del dorso del DNI
+          </p>
           <button
             onClick={detenerScanner}
             className="py-4 rounded-2xl bg-white/10 border border-white/20 text-white font-bold active:scale-95 transition-transform"
