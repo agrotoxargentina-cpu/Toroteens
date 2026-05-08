@@ -13,16 +13,14 @@ export function ConfigPage() {
     if (config && !form) setForm({ ...config });
   }, [config]);
 
-  const handleChange = (key, value) => {
-    setForm((f) => ({ ...f, [key]: value }));
-  };
+  const handleChange = (key, value) => setForm((f) => ({ ...f, [key]: value }));
 
   const handleGuardar = async () => {
     setGuardando(true);
     setMensaje(null);
 
-    if (form.edadMinima >= form.edadMaxima) {
-      setMensaje({ tipo: 'error', texto: 'La edad mínima debe ser menor a la máxima' });
+    if (form.anioNacDesde >= form.anioNacHasta) {
+      setMensaje({ tipo: 'error', texto: 'El año mínimo debe ser menor al año máximo' });
       setGuardando(false);
       return;
     }
@@ -36,18 +34,11 @@ export function ConfigPage() {
     setGuardando(false);
   };
 
-  const cambiarNombre = () => {
-    localStorage.removeItem('guardaNombre');
-    window.location.href = '/';
-  };
-
   if (loading || !form) {
-    return (
-      <div className="flex-1 flex items-center justify-center text-white/40">
-        Cargando...
-      </div>
-    );
+    return <div className="flex-1 flex items-center justify-center text-white/40">Cargando...</div>;
   }
+
+  const anioActual = new Date().getFullYear();
 
   return (
     <div className="flex-1 flex flex-col pb-24 px-4 pt-6">
@@ -65,34 +56,46 @@ export function ConfigPage() {
         </div>
 
         <div className="bg-white/5 rounded-2xl p-4">
-          <p className="text-white/40 text-xs mb-3 uppercase tracking-wider">Rango de edad</p>
+          <p className="text-white/40 text-xs mb-1 uppercase tracking-wider">Años de nacimiento permitidos</p>
+          <p className="text-white/30 text-xs mb-3">
+            Ejemplo: desde 2007 hasta 2013 permite a nacidos entre esos años
+          </p>
           <div className="flex gap-3">
             <Field
-              label="Mínima (años)"
-              value={form.edadMinima}
+              label={`Desde (nacidos en ${form.anioNacDesde} o después)`}
+              value={form.anioNacDesde}
               type="number"
-              min={1}
-              max={99}
-              onChange={(v) => handleChange('edadMinima', parseInt(v))}
+              min={1990}
+              max={anioActual}
+              onChange={(v) => handleChange('anioNacDesde', parseInt(v))}
             />
             <Field
-              label="Máxima (años)"
-              value={form.edadMaxima}
+              label={`Hasta (nacidos en ${form.anioNacHasta} o antes)`}
+              value={form.anioNacHasta}
               type="number"
-              min={1}
-              max={99}
-              onChange={(v) => handleChange('edadMaxima', parseInt(v))}
+              min={1990}
+              max={anioActual}
+              onChange={(v) => handleChange('anioNacHasta', parseInt(v))}
             />
+          </div>
+          <div className="mt-3 bg-white/5 rounded-xl px-3 py-2 text-center">
+            <p className="text-white/40 text-xs">Rango actual</p>
+            <p className="text-purple-400 font-bold">
+              Nacidos {form.anioNacDesde} – {form.anioNacHasta}
+            </p>
+            <p className="text-white/30 text-xs">
+              ({anioActual - form.anioNacHasta} a {anioActual - form.anioNacDesde} años aprox.)
+            </p>
           </div>
         </div>
 
         <div className="bg-white/5 rounded-2xl p-4">
           <p className="text-white/40 text-xs mb-1 uppercase tracking-wider">Umbral zona naranja</p>
           <p className="text-white/30 text-xs mb-3">
-            Meses fuera del rango para mostrar advertencia en vez de rechazo
+            Meses fuera del rango que muestran advertencia en lugar de rechazo directo
           </p>
           <Field
-            label="Meses (umbral naranja)"
+            label="Meses de tolerancia (zona naranja)"
             value={form.umbralNaranja}
             type="number"
             min={0}
@@ -102,13 +105,11 @@ export function ConfigPage() {
         </div>
 
         {mensaje && (
-          <div
-            className={`rounded-2xl px-4 py-3 text-sm text-center font-medium ${
-              mensaje.tipo === 'ok'
-                ? 'bg-green-900/30 border border-green-700 text-green-300'
-                : 'bg-red-900/30 border border-red-700 text-red-300'
-            }`}
-          >
+          <div className={`rounded-2xl px-4 py-3 text-sm text-center font-medium border ${
+            mensaje.tipo === 'ok'
+              ? 'bg-green-900/30 border-green-700 text-green-300'
+              : 'bg-red-900/30 border-red-700 text-red-300'
+          }`}>
             {mensaje.texto}
           </div>
         )}
@@ -127,7 +128,7 @@ export function ConfigPage() {
             Accediste como: <span className="font-bold text-purple-400">{guardaNombre}</span>
           </p>
           <button
-            onClick={cambiarNombre}
+            onClick={() => { localStorage.removeItem('guardaNombre'); window.location.href = '/'; }}
             className="w-full py-3 rounded-xl bg-white/5 border border-white/10 text-white/60 text-sm active:scale-95 transition-transform"
           >
             Cambiar nombre

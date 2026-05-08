@@ -7,24 +7,71 @@ import { ResultCard } from '../components/ResultCard';
 import { useConfig } from '../hooks/useConfig';
 import { useScans } from '../hooks/useScans';
 
-async function decodificarImagen(img) {
-  // 1) BarcodeDetector nativo (iOS 17.4+, Chrome Android)
+const MAX_PX = 1200;
+
+async function canvasDesdeArchivo(file) {
+  // Aplica rotación EXIF correctamente (importante en fotos de celular)
+  let source;
+  try {
+    source = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  } catch {
+    source = await new Promise((res, rej) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => { URL.revokeObjectURL(url); res(img); };
+      img.onerror = rej;
+      img.src = url;
+    });
+  }
+  const ratio = Math.min(1, MAX_PX / Math.max(source.width, source.height));
+  const w = Math.floor(source.width * ratio);
+  const h = Math.floor(source.height * ratio);
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  c.getContext('2d').drawImage(source, 0, 0, w, h);
+  return c;
+}
+
+function rotarCanvas(orig, grados) {
+  if (grados === 0) return orig;
+  const c = document.createElement('canvas');
+  const horiz = grados === 90 || grados === 270;
+  c.width = horiz ? orig.height : orig.width;
+  c.height = horiz ? orig.width : orig.height;
+  const ctx = c.getContext('2d');
+  ctx.translate(c.width / 2, c.height / 2);
+  ctx.rotate((grados * Math.PI) / 180);
+  ctx.drawImage(orig, -orig.width / 2, -orig.height / 2);
+  return c;
+}
+
+async function decodificarImagen(file) {
+  const canvas = await canvasDesdeArchivo(file);
+
+  // 1) BarcodeDetector nativo — iOS 17.4+ y Chrome Android
   if ('BarcodeDetector' in window) {
     try {
       const formatos = await window.BarcodeDetector.getSupportedFormats();
       const detector = new window.BarcodeDetector({ formats: formatos });
-      const resultados = await detector.detect(img);
-      if (resultados.length > 0) return resultados[0].rawValue;
+      // Probar orientación original y rotaciones
+      for (const grados of [0, 90, 270, 180]) {
+        const c = rotarCanvas(canvas, grados);
+        const res = await detector.detect(c);
+        if (res.length > 0) return res[0].rawValue;
+      }
     } catch {}
   }
 
-  // 2) ZXing fallback
-  try {
-    const hints = new Map([[DecodeHintType.TRY_HARDER, true]]);
-    const reader = new BrowserMultiFormatReader(hints);
-    const result = await reader.decodeFromImageElement(img);
-    return result.getText();
-  } catch {}
+  // 2) ZXing fallback — todos los demás navegadores
+  const hints = new Map([[DecodeHintType.TRY_HARDER, true]]);
+  const reader = new BrowserMultiFormatReader(hints);
+  for (const grados of [0, 90, 270, 180]) {
+    try {
+      const c = rotarCanvas(canvas, grados);
+      const result = await reader.decodeFromImageUrl(c.toDataURL('image/jpeg', 0.92));
+      return result.getText();
+    } catch {}
+  }
 
   return null;
 }
@@ -65,34 +112,20 @@ export function ScannerPage() {
 
   const handleFoto = async (e) => {
     const file = e.target.files[0];
-    // Resetear el input para poder volver a escanear el mismo DNI
     e.target.value = '';
     if (!file) return;
 
     setProcesando(true);
     setError(null);
 
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.src = url;
+    const texto = await decodificarImagen(file);
 
-    img.onload = async () => {
-      const texto = await decodificarImagen(img);
-      URL.revokeObjectURL(url);
-
-      if (texto) {
-        procesarTexto(texto);
-      } else {
-        setError('No se detectó código de barras. Intentá con mejor luz y más cerca.');
-        setProcesando(false);
-      }
-    };
-
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      setError('No se pudo cargar la imagen.');
+    if (texto) {
+      procesarTexto(texto);
+    } else {
+      setError('No se detectó código. Probá con más luz y encuadrá bien el código de barras.');
       setProcesando(false);
-    };
+    }
   };
 
   const nuevoScan = () => {
@@ -102,12 +135,10 @@ export function ScannerPage() {
   };
 
   if (loading) {
-    return (
-      <div className="flex-1 flex items-center justify-center text-white/40">
-        Cargando configuración...
-      </div>
-    );
+    return <div className="flex-1 flex items-center justify-center text-white/40">Cargando...</div>;
   }
+
+  const anioActual = new Date().getFullYear();
 
   return (
     <div className="flex-1 flex flex-col pb-20 px-4 pt-6">
@@ -124,13 +155,13 @@ export function ScannerPage() {
 
       <div className="bg-white/5 rounded-2xl p-3 mb-6 flex justify-around text-center">
         <div>
-          <p className="text-white/40 text-xs">Edad mín.</p>
-          <p className="text-white font-bold text-lg">{config.edadMinima} años</p>
+          <p className="text-white/40 text-xs">Nacidos desde</p>
+          <p className="text-white font-bold text-lg">{config.anioNacDesde}</p>
         </div>
         <div className="w-px bg-white/10" />
         <div>
-          <p className="text-white/40 text-xs">Edad máx.</p>
-          <p className="text-white font-bold text-lg">{config.edadMaxima} años</p>
+          <p className="text-white/40 text-xs">Nacidos hasta</p>
+          <p className="text-white font-bold text-lg">{config.anioNacHasta}</p>
         </div>
         <div className="w-px bg-white/10" />
         <div>
@@ -141,11 +172,12 @@ export function ScannerPage() {
 
       <div className="flex-1 flex flex-col items-center justify-center gap-6">
         <div className="flex flex-col items-center gap-3 text-center px-4">
-          <div className="w-44 h-44 rounded-3xl border-2 border-dashed border-white/20 flex flex-col items-center justify-center gap-2">
+          <div className="w-44 h-44 rounded-3xl border-2 border-dashed border-white/20 flex items-center justify-center">
             <span className="text-5xl">{procesando ? '⏳' : '📷'}</span>
           </div>
-          <p className="text-white/40 text-sm">
-            Apuntá al código de barras del <strong className="text-white/70">dorso</strong> del DNI
+          <p className="text-white/40 text-sm max-w-xs">
+            Fotografiá el código de barras del <strong className="text-white/70">dorso</strong> del DNI.
+            Buena luz y encuadrá solo el código.
           </p>
         </div>
 

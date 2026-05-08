@@ -2,11 +2,20 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 
 const CONFIG_DEFAULT = {
-  edadMinima: 13,
-  edadMaxima: 17,
+  anioNacDesde: 2007,
+  anioNacHasta: 2013,
   umbralNaranja: 4,
   nombreEvento: 'ToroTEENS',
 };
+
+function mapear(data) {
+  return {
+    anioNacDesde: data.anio_nac_desde,
+    anioNacHasta: data.anio_nac_hasta,
+    umbralNaranja: data.umbral_naranja_meses,
+    nombreEvento: data.nombre_evento,
+  };
+}
 
 export function useConfig() {
   const [config, setConfig] = useState(CONFIG_DEFAULT);
@@ -18,15 +27,7 @@ export function useConfig() {
       .select('*')
       .eq('id', 1)
       .single();
-
-    if (!error && data) {
-      setConfig({
-        edadMinima: data.edad_minima,
-        edadMaxima: data.edad_maxima,
-        umbralNaranja: data.umbral_naranja_meses,
-        nombreEvento: data.nombre_evento,
-      });
-    }
+    if (!error && data) setConfig(mapear(data));
     setLoading(false);
   }, []);
 
@@ -35,19 +36,9 @@ export function useConfig() {
 
     const channel = supabase
       .channel('config-changes')
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'config' },
-        (payload) => {
-          const d = payload.new;
-          setConfig({
-            edadMinima: d.edad_minima,
-            edadMaxima: d.edad_maxima,
-            umbralNaranja: d.umbral_naranja_meses,
-            nombreEvento: d.nombre_evento,
-          });
-        }
-      )
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'config' }, (payload) => {
+        setConfig(mapear(payload.new));
+      })
       .subscribe();
 
     return () => supabase.removeChannel(channel);
@@ -57,8 +48,8 @@ export function useConfig() {
     const { error } = await supabase
       .from('config')
       .update({
-        edad_minima: nueva.edadMinima,
-        edad_maxima: nueva.edadMaxima,
+        anio_nac_desde: nueva.anioNacDesde,
+        anio_nac_hasta: nueva.anioNacHasta,
         umbral_naranja_meses: nueva.umbralNaranja,
         nombre_evento: nueva.nombreEvento,
         actualizado_por: guardaNombre,
