@@ -1,26 +1,31 @@
 import { NavLink } from 'react-router-dom';
 
 const TABS = [
-  { to: '/scanner', label: 'Escanear', icon: '📷' },
+  { to: '/scanner', label: 'Escanear', icon: '🔌' },
   { to: '/config', label: 'Ajustes', icon: '⚙️' },
   { to: '/historial', label: 'Historial', icon: '📋' },
 ];
 
 export function NavBar() {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-[#111118] border-t border-white/10 pb-safe">
-      <div className="flex">
+    <nav className="bg-[#111118] border-b border-white/10 shrink-0">
+      <div className="max-w-6xl mx-auto flex items-center gap-1 px-6 h-14">
+        <span className="text-purple-400 font-black text-lg tracking-tight mr-8">
+          TORO<span className="text-yellow-400">TEENS</span>
+        </span>
         {TABS.map((tab) => (
           <NavLink
             key={tab.to}
             to={tab.to}
             className={({ isActive }) =>
-              `flex-1 flex flex-col items-center py-3 gap-1 text-xs font-medium transition-colors ${
-                isActive ? 'text-purple-400' : 'text-white/40'
+              `flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                isActive
+                  ? 'bg-purple-600/20 text-purple-400'
+                  : 'text-white/40 hover:text-white/70 hover:bg-white/5'
               }`
             }
           >
-            <span className="text-2xl">{tab.icon}</span>
+            <span>{tab.icon}</span>
             {tab.label}
           </NavLink>
         ))}

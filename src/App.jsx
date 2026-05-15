@@ -14,8 +14,10 @@ function RequireAuth({ children }) {
 function Layout({ children }) {
   return (
     <div className="flex flex-col min-h-svh">
-      {children}
       <NavBar />
+      <div className="flex-1 flex flex-col max-w-6xl w-full mx-auto px-6 py-6">
+        {children}
+      </div>
     </div>
   );
 }

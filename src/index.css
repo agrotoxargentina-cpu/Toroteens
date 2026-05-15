@@ -2,7 +2,6 @@
 
 * {
   box-sizing: border-box;
-  -webkit-tap-highlight-color: transparent;
 }
 
 body {
@@ -18,23 +17,4 @@ body {
   min-height: 100svh;
   display: flex;
   flex-direction: column;
-}
-
-#reader {
-  width: 100% !important;
-  border: none !important;
-}
-
-#reader video {
-  border-radius: 12px;
-  width: 100% !important;
-}
-
-#reader__scan_region {
-  border-radius: 12px;
-  overflow: hidden;
-}
-
-#reader__dashboard_section_swaplink {
-  display: none !important;
 }
